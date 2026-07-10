@@ -1,4 +1,28 @@
-﻿node_modules
-.env
+# Dependencies
+node_modules
+
+# Build output
 dist
+build
+
+# Secrets / env files (all variants — including the odd "...env" name)
+.env
+.env.*
+*.env
+...env
+backend/...env
+firebase-key.json
+backend/firebase-key.json
+
+# OS
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv
+venv/
+
+# Flutter/Dart
+FYP/.dart_tool/
+FYP/build/

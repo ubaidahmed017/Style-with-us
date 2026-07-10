@@ -1,33 +1,37 @@
 #!/bin/bash
+# Run the Style With Us test suites.
+#
+# Backend tests are infra-free by default (Pydantic validators, RBAC, firebase
+# mocks). To also run the DB-backed integration test, export a Postgres DSN:
+#   export STYLEWITHUS_TEST_DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/stylewithus_test
 
-# Exit immediately if a command exits with a non-zero status
 set -e
 
-# Define colors for output
 GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${GREEN}=== Running Style With Us Test Suite ===${NC}"
+# Resolve repo root relative to this script (works on any machine).
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Part 1: Run Backend Tests
-echo -e "\n${GREEN}Step 1: Running Backend Tests (pytest)...${NC}"
-cd D:/ubaid/app/backend
+echo -e "${GREEN}=== Style With Us Test Suite ===${NC}"
 
-# Verify virtual environment or python packages
-if [ -f "requirements.txt" ]; then
-    echo "Verifying backend dependencies..."
-    pip install -q -r requirements.txt
+# --- Backend (pytest) ---
+echo -e "\n${GREEN}Backend tests (pytest)...${NC}"
+cd "$ROOT/backend"
+
+# Prefer the project venv if present, else the system python.
+PY="python"
+[ -x ".venv/bin/python" ] && PY=".venv/bin/python"
+
+"$PY" -m pytest -q
+
+# --- Flutter (optional; requires the Flutter SDK) ---
+if command -v flutter >/dev/null 2>&1; then
+  echo -e "\n${GREEN}Flutter tests (flutter test)...${NC}"
+  cd "$ROOT/FYP"
+  flutter test
+else
+  echo -e "\n(Flutter SDK not found — skipping Flutter tests)"
 fi
 
-# Run pytest with coverage
-pytest -v tests/
-
-# Part 2: Run Flutter Tests
-echo -e "\n${GREEN}Step 2: Running Flutter Frontend Tests (flutter test)...${NC}"
-cd D:/ubaid/app/FYP
-
-# Run flutter test
-flutter test test/auth_test.dart
-
-echo -e "\n${GREEN}=== All Tests Passed Successfully! ===${NC}"
+echo -e "\n${GREEN}=== Done ===${NC}"
