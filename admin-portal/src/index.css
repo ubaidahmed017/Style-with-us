@@ -2,7 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #111827;
-  color: white;
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-ink-900 text-white;
+    /* Subtle ambient brand glow behind the app. */
+    background-image:
+      radial-gradient(60rem 40rem at 110% -10%, rgba(108, 99, 255, 0.18), transparent),
+      radial-gradient(50rem 40rem at -10% 110%, rgba(157, 78, 221, 0.14), transparent);
+    background-attachment: fixed;
+  }
 }
+
+@layer components {
+  .card {
+    @apply bg-ink-700/80 border border-white/10 rounded-2xl shadow-lg backdrop-blur-sm;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-gradient
+      px-4 py-2.5 text-sm font-semibold text-white shadow-glow transition
+      hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10
+      bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10;
+  }
+  .field {
+    @apply w-full rounded-xl bg-ink-600/60 border border-white/10 px-3.5 py-2.5 text-sm
+      text-white placeholder-gray-500 outline-none transition
+      focus:border-brand-400 focus:ring-2 focus:ring-brand-500/40;
+  }
+  .nav-link {
+    @apply flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium
+      text-gray-400 transition hover:bg-white/5 hover:text-white;
+  }
+  .nav-link-active {
+    @apply bg-brand-gradient text-white shadow-glow;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+}
+
+/* Slim, on-brand scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(108, 99, 255, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(108, 99, 255, 0.6); background-clip: content-box; }

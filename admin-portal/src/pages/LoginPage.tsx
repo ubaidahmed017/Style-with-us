@@ -25,14 +25,10 @@ export const LoginPage: React.FC = () => {
       setError('Please enter both email and password.');
       return;
     }
-
     setLoading(true);
     setError(null);
-
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // AuthContext fetches the profile and checks the role. Admins are
-      // redirected by the effect above; non-admins see the "not admin" notice.
     } catch (err: any) {
       console.error('Login error:', err);
       let msg = 'Failed to sign in. Please check your credentials.';
@@ -43,87 +39,66 @@ export const LoginPage: React.FC = () => {
       }
       setError(msg);
     } finally {
-      // Always stop the spinner — otherwise an authenticated non-admin (who is
-      // never navigated away) would see it spin indefinitely.
       setLoading(false);
     }
   };
 
-  // If the user is logged in but not an admin, we show a message
   const showNotAdminError = currentUser && !isAdmin && !authLoading;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-950 text-white px-4">
-      <div className="max-w-md w-full bg-gray-900 rounded-lg shadow-xl border border-gray-800 p-8">
-        <div className="text-center mb-8">
-          <span className="text-4xl">👗</span>
-          <h1 className="text-3xl font-extrabold tracking-tight mt-2 text-white">
-            Style With Us
-          </h1>
-          <p className="text-gray-400 mt-2 text-sm">
-            System Administrator Management Portal
-          </p>
+    <div className="flex items-center justify-center min-h-screen px-4">
+      <div className="w-full max-w-md">
+        <div className="flex flex-col items-center mb-8">
+          <img src="/admin/logo.svg" alt="" className="w-16 h-16 rounded-2xl shadow-glow" />
+          <h1 className="text-2xl font-extrabold tracking-tight mt-4">Style With Us</h1>
+          <p className="text-gray-400 mt-1 text-sm">Administrator Portal</p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-900/40 border border-red-500/50 rounded-md text-red-200 text-sm">
-            {error}
-          </div>
-        )}
+        <div className="card p-8">
+          {error && (
+            <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/40 text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          {showNotAdminError && (
+            <div className="mb-5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-300 text-sm">
+              Signed in, but this account lacks administrator privileges.
+            </div>
+          )}
 
-        {showNotAdminError && (
-          <div className="mb-6 p-4 bg-yellow-900/40 border border-yellow-500/50 rounded-md text-yellow-200 text-sm">
-            Authenticated successfully, but your account lacks administrator privileges.
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300">
-              Email Address
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="admin@stylewithus.com"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="••••••••"
-              disabled={loading}
-            />
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1.5">
+                Email
+              </label>
+              <input
+                id="email" type="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="field" placeholder="admin@stylewithus.com" disabled={loading}
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1.5">
+                Password
+              </label>
+              <input
+                id="password" type="password" required value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="field" placeholder="••••••••" disabled={loading}
+              />
+            </div>
+            <button type="submit" disabled={loading} className="btn-primary w-full">
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 'Sign In'
               )}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
+        <p className="text-center text-xs text-gray-500 mt-6">
+          Restricted to authorized administrators.
+        </p>
       </div>
     </div>
   );

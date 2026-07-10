@@ -8,98 +8,70 @@ interface UserResponse {
   email: string;
   role: string;
   created_at: string;
+  is_blocked: boolean;
+  blocked_until: string | null;
+  block_reason: string | null;
 }
+
+const roleBadge = (role: string): string => {
+  const m: Record<string, string> = {
+    admin: 'bg-red-500/15 text-red-300 border border-red-500/30',
+    brand: 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30',
+    shopper: 'bg-brand-500/15 text-brand-300 border border-brand-500/30',
+  };
+  return m[role] ?? 'bg-white/10 text-gray-300';
+};
 
 export const UsersPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState<string>('');
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const pageSize = 15;
 
-  // Fetch Users
   const { data: users, isLoading, error } = useQuery<UserResponse[]>({
     queryKey: ['users', page, roleFilter],
     queryFn: async () => {
-      const roleQuery = roleFilter ? `&role=${roleFilter}` : '';
-      const res = await api.get(`/admin/users?page=${page}&page_size=${pageSize}${roleQuery}`);
-      return res.data;
+      const rq = roleFilter ? `&role=${roleFilter}` : '';
+      return (await api.get(`/admin/users?page=${page}&page_size=${pageSize}${rq}`)).data;
     },
   });
 
-  // Mutation to update user role
-  const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, newRole }: { userId: string; newRole: string }) => {
-      const res = await api.patch(`/admin/users/${userId}?new_role=${newRole}`);
-      return res.data;
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['users'] });
+  const roleMut = useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) => api.patch(`/admin/users/${id}?new_role=${role}`),
+    onSuccess: invalidate, onError: (e: any) => alert(e.response?.data?.detail || 'Failed'),
+  });
+  const blockMut = useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number }) => {
+      const reason = window.prompt('Reason (optional):') || undefined;
+      return api.post(`/admin/users/${id}/block`, { duration_days: days, reason });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      alert('User role updated successfully.');
-    },
-    onError: (err: any) => {
-      console.error('Error updating user role:', err);
-      alert(err.response?.data?.detail || 'Failed to update user role.');
-    },
+    onSuccess: invalidate, onError: (e: any) => alert(e.response?.data?.detail || 'Failed'),
+  });
+  const unblockMut = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/users/${id}/unblock`),
+    onSuccess: invalidate,
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/users/${id}`),
+    onSuccess: invalidate, onError: (e: any) => alert(e.response?.data?.detail || 'Failed'),
   });
 
-  const handleRoleChange = (userId: string, currentRole: string, newRole: string) => {
-    if (currentRole === newRole) return;
-
-    const confirmChange = window.confirm(
-      `Are you sure you want to change this user's role from ${currentRole.toUpperCase()} to ${newRole.toUpperCase()}?`
-    );
-
-    if (confirmChange) {
-      updateRoleMutation.mutate({ userId, newRole });
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  const fmt = (d: string) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-96">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <div className="flex justify-center items-center h-96"><div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
-
-  if (error) {
-    return (
-      <div className="p-6 bg-red-900/30 border border-red-500 text-red-200 rounded-md">
-        Failed to load users list.
-      </div>
-    );
-  }
+  if (error) return <div className="card p-6 border-red-500/40 text-red-300">Failed to load users.</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">User Management</h1>
-          <p className="text-gray-400 text-sm mt-1">View registered accounts and assign roles</p>
-        </div>
-
-        {/* Filter Dropdown */}
-        <div className="flex items-center space-x-2">
-          <label htmlFor="role-filter" className="text-sm font-semibold text-gray-300">
-            Filter by Role:
-          </label>
-          <select
-            id="role-filter"
-            value={roleFilter}
-            onChange={(e) => {
-              setRoleFilter(e.target.value);
-              setPage(1); // Reset to first page
-            }}
-            className="px-3 py-1.5 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
+        <p className="text-gray-400 text-sm">Manage roles and moderate accounts.</p>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-400">Role</label>
+          <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+            className="bg-ink-600 border border-white/10 rounded-lg text-white text-sm px-3 py-1.5 outline-none focus:ring-2 focus:ring-brand-500/40">
             <option value="">All Roles</option>
             <option value="shopper">Shopper</option>
             <option value="brand">Brand</option>
@@ -108,78 +80,70 @@ export const UsersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Users Table */}
-      <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-700/50">
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-700">
-            <thead className="bg-gray-750">
+          <table className="min-w-full divide-y divide-white/10">
+            <thead className="bg-white/5">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Joined</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">Actions</th>
+                {['Name', 'Email', 'Role', 'Status', 'Moderation'].map((h) => (
+                  <th key={h} className="px-6 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700 bg-gray-800">
-              {users && users.length > 0 ? (
-                users.map((user) => (
-                  <tr key={user.user_id} className="hover:bg-gray-750/30">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{user.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                        user.role === 'admin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                        user.role === 'brand' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                        'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                      {formatDate(user.created_at)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <select
-                        value={user.role}
-                        onChange={(e) => handleRoleChange(user.user_id, user.role, e.target.value)}
-                        className="bg-gray-700 border border-gray-600 rounded text-white text-xs py-1 px-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="shopper">Set Shopper</option>
-                        <option value="brand">Set Brand</option>
-                        <option value="admin">Set Admin</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 text-sm">
-                    No users found matching the selected criteria.
+            <tbody className="divide-y divide-white/5">
+              {users && users.length > 0 ? users.map((u) => (
+                <tr key={u.user_id} className="hover:bg-white/5 transition">
+                  <td className="px-6 py-4 text-sm font-medium">{u.name}<div className="text-xs text-gray-500">{fmt(u.created_at)}</div></td>
+                  <td className="px-6 py-4 text-sm text-gray-300">{u.email}</td>
+                  <td className="px-6 py-4">
+                    <select value={u.role} disabled={u.role === 'admin'}
+                      onChange={(e) => { if (window.confirm(`Change role to ${e.target.value}?`)) roleMut.mutate({ id: u.user_id, role: e.target.value }); }}
+                      className={`badge uppercase bg-transparent outline-none ${roleBadge(u.role)}`}>
+                      <option value="shopper">shopper</option>
+                      <option value="brand">brand</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                    {u.is_blocked
+                      ? <span className="badge bg-red-500/15 text-red-300 border border-red-500/30" title={u.block_reason || ''}>
+                          Blocked{u.blocked_until && u.blocked_until !== 'indefinite' ? ` · ${fmt(u.blocked_until)}` : u.blocked_until === 'indefinite' ? ' · indefinite' : ''}
+                        </span>
+                      : <span className="badge bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Active</span>}
+                  </td>
+                  <td className="px-6 py-4">
+                    {u.role === 'admin' ? (
+                      <span className="text-xs text-gray-500">—</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {u.is_blocked ? (
+                          <button onClick={() => unblockMut.mutate(u.user_id)} className="btn-ghost px-2.5 py-1 text-xs">Unblock</button>
+                        ) : (
+                          <select defaultValue="" onChange={(e) => { if (e.target.value) blockMut.mutate({ id: u.user_id, days: Number(e.target.value) }); e.currentTarget.value=''; }}
+                            className="bg-ink-600 border border-white/10 rounded-lg text-white text-xs px-2 py-1 outline-none">
+                            <option value="">Block…</option>
+                            <option value="3">3 days</option>
+                            <option value="7">7 days</option>
+                            <option value="30">1 month</option>
+                            <option value="0">Indefinite</option>
+                          </select>
+                        )}
+                        <button onClick={() => { if (window.confirm(`Delete ${u.name}? This cannot be undone.`)) deleteMut.mutate(u.user_id); }}
+                          className="px-2.5 py-1 text-xs rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10">Delete</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
+              )) : (
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500 text-sm">No users found.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-
-        {/* Pagination Controls */}
-        <div className="bg-gray-750 px-6 py-4 flex items-center justify-between border-t border-gray-700">
-          <button
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            disabled={page === 1}
-            className="px-3 py-1.5 bg-gray-700 text-white rounded text-sm hover:bg-gray-650 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          >
-            Previous
-          </button>
+        <div className="px-6 py-4 flex items-center justify-between border-t border-white/10">
+          <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={page === 1} className="btn-ghost">Previous</button>
           <span className="text-gray-400 text-sm">Page {page}</span>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!users || users.length < pageSize}
-            className="px-3 py-1.5 bg-gray-700 text-white rounded text-sm hover:bg-gray-650 disabled:opacity-50 disabled:cursor-not-allowed transition"
-          >
-            Next
-          </button>
+          <button onClick={() => setPage((p) => p + 1)} disabled={!users || users.length < pageSize} className="btn-ghost">Next</button>
         </div>
       </div>
     </div>
