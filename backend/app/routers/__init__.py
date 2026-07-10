@@ -2,14 +2,20 @@
 API route handlers package.
 """
 
-from app.routers import users, auth, inventory, ml, payments, recommendations, admin
+from app.routers import (
+    users, inventory, ml, payments, recommendations, admin,
+    reports, reviews, subscriptions, brand,
+)
 
 __all__ = [
     "users",
-    "auth",
     "inventory",
     "ml",
     "payments",
     "recommendations",
     "admin",
+    "reports",
+    "reviews",
+    "subscriptions",
+    "brand",
 ]

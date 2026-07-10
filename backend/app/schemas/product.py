@@ -83,6 +83,9 @@ class ProductCreate(BaseModel):
     garment_image_url: Optional[HttpUrl] = None
     gender_target: GenderTarget
     dominant_color_hex: Optional[str] = None
+    # Optional size specs supplied inline so a brand can upload a product plus
+    # its sizes in a single request (Requirement 8.1).
+    size_specs: List[ProductSizeSpecCreate] = []
 
     @field_validator("price")
     @classmethod
@@ -103,12 +106,21 @@ class ProductCreate(BaseModel):
                 raise ValueError("image_url must be a supported format (jpg, png, webp)")
         return v
 
+    @field_validator("dominant_color_hex")
+    @classmethod
+    def valid_color_hex(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize to '#RRGGBB' so skin-tone suitability scoring can parse it."""
+        from app.schemas.user import normalize_hex_color
+        return normalize_hex_color(v)
+
 
 class ProductResponse(ProductCreate):
     """Schema for product response."""
     product_id: UUID
     brand_id: UUID
     size_specs: List[ProductSizeSpecResponse] = []
+    # Populated by the recommendation engine ("why recommended" label).
+    why_recommended: Optional[str] = None
     created_at: str
     updated_at: str
 

@@ -47,37 +47,9 @@ services:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  worker-style:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql+asyncpg://stylewithus:${POSTGRES_PASSWORD:-stylewithus_dev}@postgres:5432/stylewithus
-      REDIS_URL: redis://redis:6379/0
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - postgres
-    volumes:
-      - ./backend:/app
-    command: celery -A app.workers.celery_app worker -Q style -c 4 --loglevel=info
-
-  worker-tryon:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgresql+asyncpg://stylewithus:${POSTGRES_PASSWORD:-stylewithus_dev}@postgres:5432/stylewithus
-      REDIS_URL: redis://redis:6379/0
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - postgres
-    volumes:
-      - ./backend:/app
-    command: celery -A app.workers.celery_app worker -Q tryon -c 2 --loglevel=info
+  # NOTE: ML (body analysis, try-on) runs on-device in the Flutter client, so no
+  # Celery workers are needed. Redis is kept for future async work. See
+  # .kiro/specs/style-with-us/requirements.md (on-device, privacy-first ML).
 
   nginx:
     image: nginx:1.25-alpine

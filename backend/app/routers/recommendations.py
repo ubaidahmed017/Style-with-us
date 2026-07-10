@@ -5,12 +5,14 @@ AI-powered outfit recommendation endpoints.
 from typing import List, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.models import User, UserProfile, Product, ProductSizeSpec, Brand, UserRole
+from app.models import User, UserProfile, Product, ProductSizeSpec, Brand, UserRole, BrandStatus
 from app.schemas import ProductResponse, ProductSizeSpecResponse
+from app.services.color import suitability, PALETTE_REFERENCE_HEX
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -78,8 +80,13 @@ async def get_outfit_recommendations(
             detail="User profile not complete. Please set gender first.",
         )
 
-    # Get all products
-    stmt = select(Product)
+    # Get all products from approved brands (eager-load size specs).
+    stmt = (
+        select(Product)
+        .join(Brand, Brand.brand_id == Product.brand_id)
+        .where(Brand.status == BrandStatus.APPROVED)
+        .options(selectinload(Product.size_specs))
+    )
     result = await db.execute(stmt)
     all_products = result.scalars().all()
 
@@ -114,13 +121,18 @@ async def get_outfit_recommendations(
                 score += 1
                 reasons.append(f"{user_profile.body_shape.value.replace('_', ' ')} shape match")
 
-        # 3. Skin tone color matching (if available)
-        if user_profile.skin_tone_palette:
-            palette_colors = SKIN_TONE_PALETTE_COLORS.get(user_profile.skin_tone_palette.value, [])
-            # If product has dominant color, check if it matches the palette
-            if product.dominant_color_hex:
-                score += 1
-                reasons.append(f"{user_profile.skin_tone_palette.value.replace('_', ' ')} palette")
+        # 3. Skin-tone colour suitability — real CIELAB undertone harmony +
+        #    perceptual contrast (prefers the measured skin hex; falls back to a
+        #    representative hex for the seasonal palette).
+        skin_hex = user_profile.skin_tone_hex
+        if not skin_hex and user_profile.skin_tone_palette:
+            skin_hex = PALETTE_REFERENCE_HEX.get(user_profile.skin_tone_palette.value)
+        if skin_hex and product.dominant_color_hex:
+            suit = suitability(skin_hex, product.dominant_color_hex)
+            if suit:
+                # 0..1 suitability weighted to ~0..3 so it meaningfully ranks.
+                score += suit["score"] * 3
+                reasons.append(suit["reason"])
 
         # 4. Size availability (if measurements available)
         if user_profile.waist_cm and user_profile.hips_cm:
@@ -166,6 +178,7 @@ async def get_outfit_recommendations(
                     )
                     for spec in product.size_specs
                 ],
+                why_recommended=" · ".join(reasons) if reasons else None,
                 created_at=product.created_at.isoformat(),
                 updated_at=product.updated_at.isoformat(),
             )

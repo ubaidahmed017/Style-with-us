@@ -1,78 +1,70 @@
+"""Shared pytest fixtures.
+
+Most of the suite is infra-free (Pydantic validators, pure functions, RBAC with a
+fake session). DB-backed integration tests are gated behind a real Postgres URL
+because the schema uses Postgres-only column types (UUID, ENUM), so SQLite can't
+stand in. Set STYLEWITHUS_TEST_DATABASE_URL to an async Postgres DSN to run them,
+e.g. postgresql+asyncpg://user:pass@localhost:5432/stylewithus_test
+"""
+
+import os
 import pytest
-import asyncio
-from typing import AsyncGenerator
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.pool import StaticPool
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
 
 from app.main import app
-from app.core.database import get_db, Base
-from app.core.firebase import initialize_firebase
+from app.core.database import get_db
+from app.models.base import Base
 
-# Test database URL - uses in-memory SQLite for speed
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+TEST_DB_URL = os.getenv("STYLEWITHUS_TEST_DATABASE_URL")
 
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for async tests"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Decorator for tests that need a real Postgres.
+requires_db = pytest.mark.skipif(
+    TEST_DB_URL is None,
+    reason="set STYLEWITHUS_TEST_DATABASE_URL (async Postgres DSN) to run DB tests",
+)
 
 
-@pytest.fixture
-async def test_db() -> AsyncGenerator[AsyncSession, None]:
-    """Create test database and session"""
-    engine = create_async_engine(
-        TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+@pytest_asyncio.fixture
+async def test_db():
+    """A clean schema + session bound to the app via dependency override."""
+    if not TEST_DB_URL:
+        pytest.skip("no test database configured")
 
+    engine = create_async_engine(TEST_DB_URL)
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session = AsyncSession(engine, expire_on_commit=False)
+    Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with Session() as session:
+        async def _override_get_db():
+            yield session
 
-    async def override_get_db():
-        yield async_session
+        app.dependency_overrides[get_db] = _override_get_db
+        yield session
+        app.dependency_overrides.pop(get_db, None)
 
-    app.dependency_overrides[get_db] = override_get_db
-
-    yield async_session
-
-    await async_session.close()
     await engine.dispose()
 
 
-@pytest.fixture
-async def client(test_db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Create test HTTP client"""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+@pytest_asyncio.fixture
+async def client(test_db):
+    """HTTP client wired to the ASGI app with the test DB override in place."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
 
 @pytest.fixture
 def mock_firebase_token():
-    """Mock Firebase token for testing"""
     return {
         "uid": "test-user-123",
         "email": "test@example.com",
         "email_verified": True,
-        "iat": 1234567890,
-        "exp": 9999999999,
     }
-
-
-@pytest.fixture
-def mock_decoded_token(mock_firebase_token):
-    """Create mock decoded Firebase token"""
-    class MockDecodedToken:
-        def __getitem__(self, key):
-            return mock_firebase_token.get(key)
-
-        def get(self, key, default=None):
-            return mock_firebase_token.get(key, default)
-
-    return MockDecodedToken()

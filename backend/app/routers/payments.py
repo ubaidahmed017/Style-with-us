@@ -65,9 +65,13 @@ async def create_payment_intent(
                 detail=f"Product {item.product_id} not found"
             )
 
-        # Get size spec
-        spec_stmt = select(ProductSizeSpec).where(
-            ProductSizeSpec.spec_id == item.size_spec_id
+        # Get size spec with a row-level lock (SELECT ... FOR UPDATE) so two
+        # concurrent checkouts for the last unit can't both pass the stock check
+        # (Requirement 10.7). The lock is held until this transaction commits.
+        spec_stmt = (
+            select(ProductSizeSpec)
+            .where(ProductSizeSpec.spec_id == item.size_spec_id)
+            .with_for_update()
         )
         spec_result = await db.execute(spec_stmt)
         size_spec = spec_result.scalar_one_or_none()
@@ -95,30 +99,45 @@ async def create_payment_intent(
             detail="Order total must be greater than zero"
         )
 
-    # Create Stripe PaymentIntent
-    try:
-        intent = stripe.PaymentIntent.create(
-            amount=int(total_amount * 100),  # Stripe uses cents
-            currency="usd",
-            metadata={"user_id": str(current_user.user_id)}
-        )
-    except stripe.error.StripeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Stripe error: {str(e)}"
-        )
+    # Create the PaymentIntent. When a real Stripe secret key is configured we
+    # call Stripe; otherwise (demo mode) we simulate an intent so checkout works
+    # end-to-end without external payment credentials.
+    from uuid import uuid4
 
-    # Create Order record
+    stripe_key = settings.stripe_secret_key or ""
+    stripe_configured = stripe_key.startswith("sk_") and "..." not in stripe_key and len(stripe_key) > 20
+
+    if stripe_configured:
+        try:
+            intent = stripe.PaymentIntent.create(
+                amount=int(total_amount * 100),  # Stripe uses cents
+                currency="usd",
+                metadata={"user_id": str(current_user.user_id)},
+            )
+            payment_intent_id = intent.id
+            client_secret = intent.client_secret
+        except stripe.error.StripeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Stripe error: {str(e)}",
+            )
+    else:
+        payment_intent_id = f"pi_demo_{uuid4().hex}"
+        client_secret = f"{payment_intent_id}_secret_demo"
+
+    # In demo mode (no real Stripe) there is no webhook to confirm the order, so
+    # we confirm on placement: the order counts toward brand earnings, commission
+    # and admin revenue immediately, and stock is decremented now.
     order = Order(
         user_id=current_user.user_id,
         total_amount=total_amount,
-        status=OrderStatus.PENDING,
-        payment_intent_id=intent.id,
+        status=OrderStatus.PENDING if stripe_configured else OrderStatus.CONFIRMED,
+        payment_intent_id=payment_intent_id,
     )
     db.add(order)
     await db.flush()  # Flush to get order.order_id without committing
 
-    # Create OrderItems
+    # Create OrderItems (and, in demo mode, decrement stock immediately).
     for product, size_spec, quantity, price_at_purchase in order_items:
         order_item = OrderItem(
             order_id=order.order_id,
@@ -128,11 +147,13 @@ async def create_payment_intent(
             price_at_purchase=price_at_purchase,
         )
         db.add(order_item)
+        if not stripe_configured:
+            size_spec.stock_quantity -= quantity
 
     await db.commit()
 
     return PaymentIntentResponse(
-        client_secret=intent.client_secret,
+        client_secret=client_secret,
         order_id=order.order_id,
         total_amount=total_amount,
     )

@@ -98,6 +98,20 @@ async def verify_firebase_token(
         raise HTTPException(status_code=401, detail=detail)
 
 
+def _ensure_not_blocked(db_user: User) -> None:
+    """Raise 403 if the account is currently blocked (moderation)."""
+    if db_user.is_blocked:
+        if db_user.block_is_indefinite:
+            when = "until an administrator lifts the block"
+        else:
+            when = f"until {db_user.blocked_until.isoformat()}"
+        reason = f": {db_user.block_reason}" if db_user.block_reason else ""
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your account is blocked {when}{reason}",
+        )
+
+
 def require_role(required_role: UserRole):
     """
     RBAC dependency factory - requires user to have a specific role.
@@ -111,7 +125,7 @@ def require_role(required_role: UserRole):
     async def dependency(
         user: DecodedToken = Depends(verify_firebase_token),
         db: AsyncSession = Depends(get_db),
-    ) -> DecodedToken:
+    ) -> User:
         # Get user from database
         from sqlalchemy import select
 
@@ -125,9 +139,11 @@ def require_role(required_role: UserRole):
                 detail="User not found"
             )
 
+        _ensure_not_blocked(db_user)
+
         # Admin users bypass all role checks
         if db_user.role == UserRole.ADMIN:
-            return user
+            return db_user
 
         # Check if user has required role
         if db_user.role != required_role:
@@ -136,7 +152,9 @@ def require_role(required_role: UserRole):
                 detail=f"This action requires {required_role.value} role"
             )
 
-        return user
+        # Return the DB User (endpoints annotate current_user: User and use
+        # attributes like current_user.user_id).
+        return db_user
 
     return dependency
 
@@ -169,5 +187,7 @@ async def get_current_user(
             status_code=404,
             detail="User not found"
         )
+
+    _ensure_not_blocked(db_user)
 
     return db_user

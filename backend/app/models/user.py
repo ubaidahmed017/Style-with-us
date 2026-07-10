@@ -3,12 +3,16 @@ User and UserProfile models.
 """
 
 import uuid
-from sqlalchemy import Column, String, Float, Integer, ForeignKey, Enum, Index
+from datetime import datetime
+from sqlalchemy import Column, String, Float, Integer, ForeignKey, Enum, Index, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, TimestampMixin
 from app.models.enums import UserRole, Gender, BodyShape, SkinTonePalette, UnitPreference
+
+# Sentinel far-future date used for an indefinite block (until admin unblocks).
+INDEFINITE_BLOCK = datetime(9999, 12, 31)
 
 
 class User(Base, TimestampMixin):
@@ -36,6 +40,11 @@ class User(Base, TimestampMixin):
         default=UserRole.SHOPPER
     )
 
+    # Moderation: when set to a future time, the account is blocked until then.
+    # INDEFINITE_BLOCK (year 9999) means blocked until an admin unblocks.
+    blocked_until = Column(DateTime, nullable=True)
+    block_reason = Column(String(500), nullable=True)
+
     # Relationships
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     brand = relationship("Brand", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -45,6 +54,15 @@ class User(Base, TimestampMixin):
     __table_args__ = (
         Index("idx_users_firebase_uid", "firebase_uid"),
     )
+
+    @property
+    def is_blocked(self) -> bool:
+        """True if the account is currently blocked."""
+        return self.blocked_until is not None and self.blocked_until > datetime.utcnow()
+
+    @property
+    def block_is_indefinite(self) -> bool:
+        return self.blocked_until == INDEFINITE_BLOCK
 
 
 class UserProfile(Base, TimestampMixin):

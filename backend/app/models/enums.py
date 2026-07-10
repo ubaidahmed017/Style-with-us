@@ -66,3 +66,23 @@ class OrderStatus(PyEnum):
     CONFIRMED = "confirmed"
     SHIPPED = "shipped"
     CANCELLED = "cancelled"
+
+
+class BrandStatus(PyEnum):
+    """Approval status of a brand partner account."""
+    PENDING = "pending"      # awaiting admin review
+    APPROVED = "approved"    # can list products / be shown to shoppers
+    REJECTED = "rejected"    # application declined
+
+
+class ReportStatus(PyEnum):
+    """Status of a user/brand issue report."""
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class SubscriptionStatus(PyEnum):
+    """Status of a shopper's premium subscription."""
+    ACTIVE = "active"
+    CANCELLED = "cancelled"

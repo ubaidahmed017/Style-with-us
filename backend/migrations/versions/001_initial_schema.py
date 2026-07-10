@@ -18,28 +18,28 @@ depends_on = None
 
 def upgrade() -> None:
     # Create ENUM types
-    userRole_enum = postgresql.ENUM('shopper', 'brand', 'admin', name='userrole')
+    userRole_enum = postgresql.ENUM('shopper', 'brand', 'admin', name='userrole', create_type=False)
     userRole_enum.create(op.get_bind())
 
-    gender_enum = postgresql.ENUM('male', 'female', 'non_binary', name='gender')
+    gender_enum = postgresql.ENUM('male', 'female', 'non_binary', name='gender', create_type=False)
     gender_enum.create(op.get_bind())
 
-    genderTarget_enum = postgresql.ENUM('male', 'female', 'unisex', name='gendertarget')
+    genderTarget_enum = postgresql.ENUM('male', 'female', 'unisex', name='gendertarget', create_type=False)
     genderTarget_enum.create(op.get_bind())
 
-    bodyShape_enum = postgresql.ENUM('hourglass', 'pear', 'apple', 'rectangle', 'inverted_triangle', name='bodyshape')
+    bodyShape_enum = postgresql.ENUM('hourglass', 'pear', 'apple', 'rectangle', 'inverted_triangle', name='bodyshape', create_type=False)
     bodyShape_enum.create(op.get_bind())
 
-    skinTonePalette_enum = postgresql.ENUM('warm_spring', 'warm_autumn', 'cool_summer', 'cool_winter', 'neutral_light', 'neutral_deep', name='skinTonepalette')
+    skinTonePalette_enum = postgresql.ENUM('warm_spring', 'warm_autumn', 'cool_summer', 'cool_winter', 'neutral_light', 'neutral_deep', name='skintonepalette', create_type=False)
     skinTonePalette_enum.create(op.get_bind())
 
-    unitPreference_enum = postgresql.ENUM('metric', 'imperial', name='unitpreference')
+    unitPreference_enum = postgresql.ENUM('metric', 'imperial', name='unitpreference', create_type=False)
     unitPreference_enum.create(op.get_bind())
 
-    mlJobStatus_enum = postgresql.ENUM('uploaded', 'queued', 'processing', 'completed', 'failed', name='mljobstatus')
+    mlJobStatus_enum = postgresql.ENUM('uploaded', 'queued', 'processing', 'completed', 'failed', name='mljobstatus', create_type=False)
     mlJobStatus_enum.create(op.get_bind())
 
-    orderStatus_enum = postgresql.ENUM('pending', 'confirmed', 'shipped', 'cancelled', name='orderstatus')
+    orderStatus_enum = postgresql.ENUM('pending', 'confirmed', 'shipped', 'cancelled', name='orderstatus', create_type=False)
     orderStatus_enum.create(op.get_bind())
 
     # Create users table
@@ -222,7 +222,7 @@ def downgrade() -> None:
     unitPreference_enum = postgresql.ENUM('metric', 'imperial', name='unitpreference')
     unitPreference_enum.drop(op.get_bind())
 
-    skinTonePalette_enum = postgresql.ENUM('warm_spring', 'warm_autumn', 'cool_summer', 'cool_winter', 'neutral_light', 'neutral_deep', name='skinTonepalette')
+    skinTonePalette_enum = postgresql.ENUM('warm_spring', 'warm_autumn', 'cool_summer', 'cool_winter', 'neutral_light', 'neutral_deep', name='skintonepalette')
     skinTonePalette_enum.drop(op.get_bind())
 
     bodyShape_enum = postgresql.ENUM('hourglass', 'pear', 'apple', 'rectangle', 'inverted_triangle', name='bodyshape')

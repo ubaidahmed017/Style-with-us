@@ -5,6 +5,7 @@ Pydantic schemas package.
 from app.schemas.user import (
     UserBase,
     UserCreate,
+    UserRegisterRequest,
     UserResponse,
     UserProfileCreate,
     UserProfileResponse,
@@ -34,11 +35,27 @@ from app.schemas.ml_job import (
     MLJobStatus,
     AIAnalysisResult,
 )
+from app.schemas.report import ReportCreate, ReportUpdate, ReportResponse
+from app.schemas.review import ReviewCreate, ReviewResponse, RatingSummary
+from app.schemas.finance import (
+    PlatformSettingsResponse,
+    PlatformSettingsUpdate,
+    PayoutCreate,
+    PayoutResponse,
+    BrandEarnings,
+    FinanceOverview,
+    SubscriptionPlanCreate,
+    SubscriptionPlanUpdate,
+    SubscriptionPlanResponse,
+    SubscriptionResponse,
+    SubscribeRequest,
+)
 
 __all__ = [
     # User schemas
     "UserBase",
     "UserCreate",
+    "UserRegisterRequest",
     "UserResponse",
     "UserProfileCreate",
     "UserProfileResponse",
@@ -64,4 +81,24 @@ __all__ = [
     "MLJobResponse",
     "MLJobStatus",
     "AIAnalysisResult",
+    # Reports
+    "ReportCreate",
+    "ReportUpdate",
+    "ReportResponse",
+    # Reviews
+    "ReviewCreate",
+    "ReviewResponse",
+    "RatingSummary",
+    # Finance
+    "PlatformSettingsResponse",
+    "PlatformSettingsUpdate",
+    "PayoutCreate",
+    "PayoutResponse",
+    "BrandEarnings",
+    "FinanceOverview",
+    "SubscriptionPlanCreate",
+    "SubscriptionPlanUpdate",
+    "SubscriptionPlanResponse",
+    "SubscriptionResponse",
+    "SubscribeRequest",
 ]

@@ -4,12 +4,13 @@ Machine learning job submission and status endpoints.
 
 from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.models import User, MLJob, Product
 from app.models.enums import MLJobStatus
 from app.schemas import (
@@ -23,8 +24,10 @@ router = APIRouter(prefix="/ml", tags=["ml"])
 
 
 @router.post("/style-analysis", response_model=MLJobResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def submit_style_analysis(
-    request: StyleAnalysisRequest,
+    request: Request,
+    payload: StyleAnalysisRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MLJobResponse:
@@ -34,20 +37,17 @@ async def submit_style_analysis(
     Returns HTTP 202 (Accepted) with job ID for polling.
     The actual ML processing happens asynchronously via Celery worker.
     """
-    # Create ML job record
+    # Create ML job record. Note: the actual analysis runs on-device (Flutter);
+    # this endpoint only records the job for auditing/admin visibility.
     job = MLJob(
         user_id=current_user.user_id,
         job_type="style_analysis",
         status=MLJobStatus.QUEUED,
-        input_image_url=str(request.image_url),
+        input_image_url=str(payload.image_url),
     )
     db.add(job)
     await db.commit()
     await db.refresh(job)
-
-    # TODO: Enqueue to Celery worker
-    # from app.workers.celery_app import process_style_analysis
-    # process_style_analysis.apply_async(args=[str(job.job_id), str(request.image_url)])
 
     return MLJobResponse(
         job_id=job.job_id,
@@ -57,8 +57,10 @@ async def submit_style_analysis(
 
 
 @router.post("/virtual-tryon", response_model=MLJobResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def submit_virtual_tryon(
-    request: VirtualTryOnRequest,
+    request: Request,
+    payload: VirtualTryOnRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MLJobResponse:
@@ -69,7 +71,7 @@ async def submit_virtual_tryon(
     Returns HTTP 202 (Accepted) with job ID for polling.
     """
     # Verify product exists
-    stmt = select(Product).where(Product.product_id == request.product_id)
+    stmt = select(Product).where(Product.product_id == payload.product_id)
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
 
@@ -79,23 +81,17 @@ async def submit_virtual_tryon(
             detail="Product not found"
         )
 
-    # Create ML job record
+    # Create ML job record. Actual compositing runs on-device (Flutter).
     job = MLJob(
         user_id=current_user.user_id,
         job_type="virtual_tryon",
         status=MLJobStatus.QUEUED,
-        input_image_url=str(request.image_url),
-        product_id=request.product_id,
+        input_image_url=str(payload.image_url),
+        product_id=payload.product_id,
     )
     db.add(job)
     await db.commit()
     await db.refresh(job)
-
-    # TODO: Enqueue to Celery worker
-    # from app.workers.celery_app import process_virtual_tryon
-    # process_virtual_tryon.apply_async(
-    #     args=[str(job.job_id), str(request.image_url), str(request.product_id)]
-    # )
 
     return MLJobResponse(
         job_id=job.job_id,

@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, TimestampMixin
-from app.models.enums import GenderTarget
+from app.models.enums import GenderTarget, BrandStatus
 
 
 class Brand(Base, TimestampMixin):
@@ -31,6 +31,13 @@ class Brand(Base, TimestampMixin):
     )
     company_name = Column(String(255), nullable=False)
     logo_url = Column(String(1024), nullable=True)
+    # Approval workflow: new brands are PENDING until an admin approves them.
+    status = Column(
+        Enum(BrandStatus),
+        nullable=False,
+        default=BrandStatus.PENDING,
+    )
+    rejection_reason = Column(String(500), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="brand")

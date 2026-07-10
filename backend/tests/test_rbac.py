@@ -1,206 +1,91 @@
+"""RBAC tests for the real app.core.auth.require_role (P2/P3/P4).
+
+Infra-free: require_role only needs `db.execute(stmt).scalar_one_or_none()`, so a
+tiny fake session standing in for AsyncSession is enough to exercise the logic.
+"""
+
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rbac import require_role
-from app.models.user import User, UserRole
-from app.core.firebase import DecodedToken
+from app.core.auth import require_role, DecodedToken
+from app.models import User, UserRole
 
 
-class TestRBACRoleEnforcement:
-    """Tests for require_role dependency - P2 (RBAC Isolation), P3 (Brand Ownership)"""
+class _FakeResult:
+    def __init__(self, user):
+        self._user = user
 
-    @pytest.mark.asyncio
-    async def test_shopper_cannot_access_brand_routes(self, test_db: AsyncSession):
-        """Test that Shopper role cannot access /brand/* routes (P2)"""
-        # Create Shopper user
-        shopper = User(
-            firebase_uid="shopper-123",
-            email="shopper@example.com",
-            name="Shopper User",
-            role=UserRole.SHOPPER
-        )
-        test_db.add(shopper)
-        await test_db.commit()
+    def scalar_one_or_none(self):
+        return self._user
 
-        # Mock decoded token for shopper
-        decoded_token = {
-            'uid': 'shopper-123',
-            'email': 'shopper@example.com'
-        }
 
-        # Attempt to access brand route
-        brand_dep = require_role("brand")
+class _FakeSession:
+    """Returns the same user for any query (matches require_role's single lookup)."""
 
-        with pytest.raises(HTTPException) as exc_info:
-            await brand_dep(decoded_token, test_db)
+    def __init__(self, user):
+        self._user = user
 
-        assert exc_info.value.status_code == 403
-        assert "Requires brand role" in exc_info.value.detail
+    async def execute(self, stmt):
+        return _FakeResult(self._user)
 
-    @pytest.mark.asyncio
-    async def test_shopper_cannot_access_admin_routes(self, test_db: AsyncSession):
-        """Test that Shopper role cannot access /admin/* routes (P2)"""
-        shopper = User(
-            firebase_uid="shopper-123",
-            email="shopper@example.com",
-            name="Shopper User",
-            role=UserRole.SHOPPER
-        )
-        test_db.add(shopper)
-        await test_db.commit()
 
-        decoded_token = {
-            'uid': 'shopper-123',
-            'email': 'shopper@example.com'
-        }
+def _user(role):
+    return User(
+        firebase_uid=f"{role.value}-123",
+        email=f"{role.value}@example.com",
+        name=f"{role.value} user",
+        role=role,
+    )
 
-        admin_dep = require_role("admin")
 
-        with pytest.raises(HTTPException) as exc_info:
-            await admin_dep(decoded_token, test_db)
+def _token(role):
+    return DecodedToken(uid=f"{role.value}-123", email=f"{role.value}@example.com")
 
-        assert exc_info.value.status_code == 403
-        assert "Requires admin role" in exc_info.value.detail
 
-    @pytest.mark.asyncio
-    async def test_brand_cannot_access_admin_routes(self, test_db: AsyncSession):
-        """Test that Brand role cannot access /admin/* routes (P2)"""
-        brand = User(
-            firebase_uid="brand-123",
-            email="brand@example.com",
-            name="Brand User",
-            role=UserRole.BRAND
-        )
-        test_db.add(brand)
-        await test_db.commit()
+async def _call(required: UserRole, db_user_role: UserRole):
+    dep = require_role(required)
+    db = _FakeSession(_user(db_user_role) if db_user_role else None)
+    return await dep(user=_token(required), db=db)
 
-        decoded_token = {
-            'uid': 'brand-123',
-            'email': 'brand@example.com'
-        }
 
-        admin_dep = require_role("admin")
+class TestRoleEnforcement:
+    async def test_shopper_denied_brand(self):
+        with pytest.raises(HTTPException) as exc:
+            await _call(UserRole.BRAND, UserRole.SHOPPER)
+        assert exc.value.status_code == 403
 
-        with pytest.raises(HTTPException) as exc_info:
-            await admin_dep(decoded_token, test_db)
+    async def test_shopper_denied_admin(self):
+        with pytest.raises(HTTPException) as exc:
+            await _call(UserRole.ADMIN, UserRole.SHOPPER)
+        assert exc.value.status_code == 403
 
-        assert exc_info.value.status_code == 403
+    async def test_brand_denied_admin(self):
+        with pytest.raises(HTTPException) as exc:
+            await _call(UserRole.ADMIN, UserRole.BRAND)
+        assert exc.value.status_code == 403
 
-    @pytest.mark.asyncio
-    async def test_admin_can_access_all_routes(self, test_db: AsyncSession):
-        """Test that Admin role can access all routes (P4)"""
-        admin = User(
-            firebase_uid="admin-123",
-            email="admin@example.com",
-            name="Admin User",
-            role=UserRole.ADMIN
-        )
-        test_db.add(admin)
-        await test_db.commit()
-
-        decoded_token = {
-            'uid': 'admin-123',
-            'email': 'admin@example.com'
-        }
-
-        # Test admin on brand routes
-        brand_dep = require_role("brand")
-        result = await brand_dep(decoded_token, test_db)
+    async def test_brand_allowed_brand(self):
+        result = await _call(UserRole.BRAND, UserRole.BRAND)
         assert result is not None
 
-        # Test admin on admin routes
-        admin_dep = require_role("admin")
-        result = await admin_dep(decoded_token, test_db)
+    async def test_shopper_allowed_shopper(self):
+        result = await _call(UserRole.SHOPPER, UserRole.SHOPPER)
         assert result is not None
 
-        # Test admin on shopper routes
-        shopper_dep = require_role("shopper")
-        result = await shopper_dep(decoded_token, test_db)
+
+class TestAdminBypass:
+    """P4: admin passes every role gate."""
+
+    @pytest.mark.parametrize("required", [UserRole.SHOPPER, UserRole.BRAND, UserRole.ADMIN])
+    async def test_admin_bypasses_all(self, required):
+        result = await _call(required, UserRole.ADMIN)
         assert result is not None
 
-    @pytest.mark.asyncio
-    async def test_shopper_can_access_shopper_routes(self, test_db: AsyncSession):
-        """Test that Shopper role can access shopper routes"""
-        shopper = User(
-            firebase_uid="shopper-123",
-            email="shopper@example.com",
-            name="Shopper User",
-            role=UserRole.SHOPPER
-        )
-        test_db.add(shopper)
-        await test_db.commit()
 
-        decoded_token = {
-            'uid': 'shopper-123',
-            'email': 'shopper@example.com'
-        }
-
-        shopper_dep = require_role("shopper")
-        result = await shopper_dep(decoded_token, test_db)
-        assert result is not None
-
-    @pytest.mark.asyncio
-    async def test_brand_can_access_brand_routes(self, test_db: AsyncSession):
-        """Test that Brand role can access brand routes"""
-        brand = User(
-            firebase_uid="brand-123",
-            email="brand@example.com",
-            name="Brand User",
-            role=UserRole.BRAND
-        )
-        test_db.add(brand)
-        await test_db.commit()
-
-        decoded_token = {
-            'uid': 'brand-123',
-            'email': 'brand@example.com'
-        }
-
-        brand_dep = require_role("brand")
-        result = await brand_dep(decoded_token, test_db)
-        assert result is not None
-
-    @pytest.mark.asyncio
-    async def test_nonexistent_user_raises_404(self, test_db: AsyncSession):
-        """Test that nonexistent user raises 404"""
-        decoded_token = {
-            'uid': 'nonexistent-user',
-            'email': 'nonexistent@example.com'
-        }
-
-        brand_dep = require_role("brand")
-
-        with pytest.raises(HTTPException) as exc_info:
-            await brand_dep(decoded_token, test_db)
-
-        assert exc_info.value.status_code == 404
-
-
-class TestBrandOwnershipVerification:
-    """Tests for brand ownership verification (P3)"""
-
-    @pytest.mark.asyncio
-    async def test_brand_cannot_modify_another_brands_product(self, test_db: AsyncSession):
-        """Test that Brand A cannot modify Brand B's product (P3)"""
-        # This would be tested in the product endpoint tests
-        # Create two brands and verify isolation
-        brand_a = User(
-            firebase_uid="brand-a",
-            email="brand-a@example.com",
-            name="Brand A",
-            role=UserRole.BRAND
-        )
-        brand_b = User(
-            firebase_uid="brand-b",
-            email="brand-b@example.com",
-            name="Brand B",
-            role=UserRole.BRAND
-        )
-        test_db.add(brand_a)
-        test_db.add(brand_b)
-        await test_db.commit()
-
-        # In actual endpoint tests, verify that brand-a cannot modify brand-b's products
-        # This is enforced in the product router with: WHERE brand_id = :caller_brand_id
-        assert brand_a.user_id != brand_b.user_id
+class TestMissingUser:
+    async def test_unknown_user_404(self):
+        dep = require_role(UserRole.BRAND)
+        db = _FakeSession(None)
+        with pytest.raises(HTTPException) as exc:
+            await dep(user=_token(UserRole.BRAND), db=db)
+        assert exc.value.status_code == 404

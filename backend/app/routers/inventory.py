@@ -5,11 +5,12 @@ Product inventory management endpoints.
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, require_role
 from app.core.database import get_db
-from app.models import User, Product, ProductSizeSpec, Brand, UserRole
+from app.models import User, Product, ProductSizeSpec, Brand, UserRole, BrandStatus
 from app.schemas import (
     ProductCreate,
     ProductResponse,
@@ -42,6 +43,13 @@ async def create_product(
             detail="User is not associated with a brand"
         )
 
+    # Brand must be approved by an admin before it can list products.
+    if brand.status != BrandStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your brand is pending admin approval and cannot list products yet.",
+        )
+
     # Create product
     new_product = Product(
         brand_id=brand.brand_id,
@@ -55,6 +63,30 @@ async def create_product(
         dominant_color_hex=product.dominant_color_hex,
     )
     db.add(new_product)
+    await db.flush()  # get product_id before adding size specs
+
+    # Persist any inline size specs (validated) so the product ships with sizes.
+    created_specs = []
+    for spec in product.size_specs:
+        spec.validate_ranges()
+        new_spec = ProductSizeSpec(
+            product_id=new_product.product_id,
+            size_label=spec.size_label,
+            stock_quantity=spec.stock_quantity,
+            chest_min=spec.chest_min,
+            chest_max=spec.chest_max,
+            waist_min=spec.waist_min,
+            waist_max=spec.waist_max,
+            hips_min=spec.hips_min,
+            hips_max=spec.hips_max,
+            inseam_min=spec.inseam_min,
+            inseam_max=spec.inseam_max,
+            shoulder_width_min=spec.shoulder_width_min,
+            shoulder_width_max=spec.shoulder_width_max,
+        )
+        db.add(new_spec)
+        created_specs.append(new_spec)
+
     await db.commit()
     await db.refresh(new_product)
 
@@ -69,7 +101,25 @@ async def create_product(
         garment_image_url=new_product.garment_image_url,
         gender_target=new_product.gender_target,
         dominant_color_hex=new_product.dominant_color_hex,
-        size_specs=[],
+        size_specs=[
+            ProductSizeSpecResponse(
+                spec_id=s.spec_id,
+                product_id=s.product_id,
+                size_label=s.size_label,
+                stock_quantity=s.stock_quantity,
+                chest_min=s.chest_min,
+                chest_max=s.chest_max,
+                waist_min=s.waist_min,
+                waist_max=s.waist_max,
+                hips_min=s.hips_min,
+                hips_max=s.hips_max,
+                inseam_min=s.inseam_min,
+                inseam_max=s.inseam_max,
+                shoulder_width_min=s.shoulder_width_min,
+                shoulder_width_max=s.shoulder_width_max,
+            )
+            for s in created_specs
+        ],
         created_at=new_product.created_at.isoformat(),
         updated_at=new_product.updated_at.isoformat(),
     )
@@ -161,7 +211,13 @@ async def list_products(
     """
     from uuid import UUID
 
-    stmt = select(Product)
+    # Public catalog only shows products from admin-approved brands.
+    stmt = (
+        select(Product)
+        .join(Brand, Brand.brand_id == Product.brand_id)
+        .where(Brand.status == BrandStatus.APPROVED)
+        .options(selectinload(Product.size_specs))
+    )
 
     # Filter by gender (default to user's gender if shopper)
     if current_user.role == UserRole.SHOPPER:
@@ -181,10 +237,107 @@ async def list_products(
             gender_targets = gender_map.get(user_profile.gender, [])
             stmt = stmt.where(Product.gender_target.in_(gender_targets))
 
+    # Explicit gender query param (overrides the shopper default above).
+    if gender is not None:
+        from app.models.enums import GenderTarget
+        try:
+            stmt = stmt.where(Product.gender_target == GenderTarget(gender.lower()))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid gender filter")
+
+    # Size search: keep only products that have at least one size spec matching
+    # the requested label and/or covering the given measurements (Requirement 9).
+    spec_conditions = []
+    if size_label:
+        spec_conditions.append(ProductSizeSpec.size_label == size_label)
+    if chest is not None:
+        spec_conditions.append(
+            and_(ProductSizeSpec.chest_min <= chest, ProductSizeSpec.chest_max >= chest)
+        )
+    if waist is not None:
+        spec_conditions.append(
+            and_(ProductSizeSpec.waist_min <= waist, ProductSizeSpec.waist_max >= waist)
+        )
+    if hips is not None:
+        spec_conditions.append(
+            and_(ProductSizeSpec.hips_min <= hips, ProductSizeSpec.hips_max >= hips)
+        )
+    if inseam is not None:
+        spec_conditions.append(
+            and_(ProductSizeSpec.inseam_min <= inseam, ProductSizeSpec.inseam_max >= inseam)
+        )
+
+    if spec_conditions:
+        matching_specs = (
+            select(ProductSizeSpec.product_id)
+            .where(and_(*spec_conditions))
+            .distinct()
+        )
+        stmt = stmt.where(Product.product_id.in_(matching_specs))
+
     # Apply pagination
     offset = (page - 1) * page_size
     stmt = stmt.offset(offset).limit(page_size)
 
+    result = await db.execute(stmt)
+    products = result.scalars().all()
+
+    return [
+        ProductResponse(
+            product_id=p.product_id,
+            brand_id=p.brand_id,
+            sku=p.sku,
+            name=p.name,
+            description=p.description,
+            price=p.price,
+            image_url=p.image_url,
+            garment_image_url=p.garment_image_url,
+            gender_target=p.gender_target,
+            dominant_color_hex=p.dominant_color_hex,
+            size_specs=[
+                ProductSizeSpecResponse(
+                    spec_id=spec.spec_id,
+                    product_id=spec.product_id,
+                    size_label=spec.size_label,
+                    stock_quantity=spec.stock_quantity,
+                    chest_min=spec.chest_min,
+                    chest_max=spec.chest_max,
+                    waist_min=spec.waist_min,
+                    waist_max=spec.waist_max,
+                    hips_min=spec.hips_min,
+                    hips_max=spec.hips_max,
+                    inseam_min=spec.inseam_min,
+                    inseam_max=spec.inseam_max,
+                    shoulder_width_min=spec.shoulder_width_min,
+                    shoulder_width_max=spec.shoulder_width_max,
+                )
+                for spec in p.size_specs
+            ],
+            created_at=p.created_at.isoformat(),
+            updated_at=p.updated_at.isoformat(),
+        )
+        for p in products
+    ]
+
+
+@router.get("/my-products", response_model=List[ProductResponse])
+async def list_my_products(
+    current_user: User = Depends(require_role(UserRole.BRAND)),
+    db: AsyncSession = Depends(get_db),
+) -> List[ProductResponse]:
+    """List the calling brand's own products (Requirement 8.5)."""
+    brand_stmt = select(Brand).where(Brand.user_id == current_user.user_id)
+    brand_result = await db.execute(brand_stmt)
+    brand = brand_result.scalar_one_or_none()
+    if not brand:
+        # No brand record yet -> no products.
+        return []
+
+    stmt = (
+        select(Product)
+        .where(Product.brand_id == brand.brand_id)
+        .options(selectinload(Product.size_specs))
+    )
     result = await db.execute(stmt)
     products = result.scalars().all()
 
