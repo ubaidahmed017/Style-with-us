@@ -42,8 +42,9 @@ class ProductSizeSpec {
       hipsMax: json['hips_max']?.toDouble(),
       inseamMin: json['inseam_min']?.toDouble(),
       inseamMax: json['inseam_max']?.toDouble(),
-      shoulderMin: json['shoulder_min']?.toDouble(),
-      shoulderMax: json['shoulder_max']?.toDouble(),
+      // Backend serializes these as shoulder_width_min/max.
+      shoulderMin: json['shoulder_width_min']?.toDouble(),
+      shoulderMax: json['shoulder_width_max']?.toDouble(),
     );
   }
 
@@ -105,8 +106,9 @@ class Product {
       sku: json['sku'],
       name: json['name'],
       description: json['description'],
-      price: json['price'].toDouble(),
-      imageUrl: json['image_url'],
+      price: (json['price'] as num).toDouble(),
+      // image_url can be null for products uploaded without an image.
+      imageUrl: json['image_url'] ?? '',
       garmentImageUrl: json['garment_image_url'],
       genderTarget: json['gender_target'],
       dominantColorHex: json['dominant_color_hex'],

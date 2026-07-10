@@ -54,8 +54,8 @@ class WishlistNotifier extends Notifier<List<Product>> {
           'hips_max': spec.hipsMax,
           'inseam_min': spec.inseamMin,
           'inseam_max': spec.inseamMax,
-          'shoulder_min': spec.shoulderMin,
-          'shoulder_max': spec.shoulderMax,
+          'shoulder_width_min': spec.shoulderMin,
+          'shoulder_width_max': spec.shoulderMax,
         }).toList(),
         'why_recommended': item.whyRecommended,
       }).toList());

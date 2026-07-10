@@ -18,13 +18,23 @@ class RecommendationsNotifier extends AsyncNotifier<List<RecommendedOutfitsGroup
       if (response.statusCode == 200) {
         final data = response.data;
 
-        // Parse the response structure
-        // Expected format: {
-        //   "exact_match": [...],
-        //   "similar_styles": [...],
-        //   "by_brand": [{"brand": {...}, "products": [...]}]
-        // }
+        // The backend returns a flat, ranked JSON array of products. Wrap it in
+        // a single "exact_match" group so the home screen can render it.
+        if (data is List) {
+          final products = data
+              .map((p) => Product.fromJson(p as Map<String, dynamic>))
+              .toList();
+          if (products.isEmpty) return [];
+          return [
+            RecommendedOutfitsGroup(
+              products: products,
+              section: 'exact_match',
+            ),
+          ];
+        }
 
+        // Fallback: also support a grouped object shape
+        // { "exact_match": [...], "similar_styles": [...], "by_brand": [...] }.
         final groups = <RecommendedOutfitsGroup>[];
 
         // Add exact matches

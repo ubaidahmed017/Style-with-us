@@ -80,7 +80,7 @@ class _WishlistItemCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       child: InkWell(
-        onTap: () => context.go('/shopper/product/${product.productId}', extra: product),
+        onTap: () => context.push('/shopper/product/${product.productId}', extra: product),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +149,7 @@ class _WishlistItemCard extends ConsumerWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () => context.go('/shopper/product/${product.productId}', extra: product),
+                      onPressed: () => context.push('/shopper/product/${product.productId}', extra: product),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         textStyle: const TextStyle(fontSize: 12),

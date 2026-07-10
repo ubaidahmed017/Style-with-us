@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../shared/models/product_model.dart';
@@ -7,6 +8,8 @@ import '../../core/providers/recommendations_notifier.dart';
 import '../../core/providers/profile_setup_notifier.dart';
 import '../../core/providers/cart_notifier.dart';
 import '../../core/providers/products_notifier.dart';
+import '../../core/theme.dart';
+import '../../shared/widgets/ui.dart';
 
 class ShopperHomeScreen extends ConsumerStatefulWidget {
   const ShopperHomeScreen({Key? key}) : super(key: key);
@@ -19,6 +22,16 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // Load the saved profile from the backend so measurements/gender survive an
+    // app restart (drives recommendations and size-fit).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(profileSetupProvider.notifier).loadFromBackend();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -28,17 +41,24 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Style With Us'),
-        centerTitle: true,
+        titleSpacing: 16,
+        centerTitle: false,
+        title: const Row(
+          children: [
+            AppLogo(size: 30),
+            SizedBox(width: 10),
+            Text('Style With Us'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.favorite_border),
-            onPressed: () => context.go('/shopper/wishlist'),
+            onPressed: () => context.push('/shopper/wishlist'),
             tooltip: 'Wishlist',
           ),
           IconButton(
             icon: const Icon(Icons.shopping_cart_outlined),
-            onPressed: () => context.go('/shopper/checkout'),
+            onPressed: () => context.push('/shopper/checkout'),
             tooltip: 'Cart',
           ),
           IconButton(
@@ -48,18 +68,22 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section A: Recommended for You
-            _buildRecommendedSection(context, ref),
+      body: AppBackground(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: AppSpacing.sm),
+              // Section A: Recommended for You
+              _buildRecommendedSection(context, ref),
 
-            const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xl),
 
-            // Section B: Browse All
-            _buildBrowseAllSection(context, ref),
-          ],
+              // Section B: Browse All
+              _buildBrowseAllSection(context, ref),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+          ),
         ),
       ),
     );
@@ -70,55 +94,63 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
     final hasProfile = profile.gender != null;
 
     if (!hasProfile) {
-      return Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.shade200),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.info, color: Colors.blue.shade700),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Complete Your Profile',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Set up your profile to get personalized recommendations',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ],
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            gradient: AppColors.gradientPrimary,
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
               ),
-            ),
-            ElevatedButton(
-              onPressed: () => context.go('/profile-setup'),
-              child: const Text('Complete'),
-            ),
-          ],
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.white, size: 30),
+              const SizedBox(width: AppSpacing.md),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Personalize your feed',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white)),
+                    SizedBox(height: 4),
+                    Text('Set up your profile to unlock AI recommendations.',
+                        style: TextStyle(fontSize: 13, color: Colors.white70)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              FilledButton(
+                onPressed: () => context.push('/profile-setup'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                ),
+                child: const Text('Set up'),
+              ),
+            ],
+          ),
         ),
-      );
+      ).animate().fadeIn().moveY(begin: 12);
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'Recommended for You',
-            style: Theme.of(context).textTheme.titleLarge,
+        const Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: SectionHeader(
+            title: 'Recommended for You',
+            subtitle: 'Curated for your body, size & palette',
           ),
         ),
         _buildRecommendationsList(context, ref),
@@ -202,7 +234,7 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
               Text(title, style: Theme.of(context).textTheme.titleMedium),
               Text(subtitle,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey.shade600,
+                  color: AppColors.textSecondary,
                 )),
             ],
           ),
@@ -231,7 +263,7 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -285,7 +317,7 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
     return Card(
       margin: const EdgeInsets.only(right: 12),
       child: InkWell(
-        onTap: () => context.go('/shopper/product/${product.productId}', extra: product),
+        onTap: () => context.push('/shopper/product/${product.productId}', extra: product),
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           width: 150,
@@ -294,21 +326,15 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
             children: [
               Expanded(
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Container(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+                  child: SizedBox(
                     width: double.infinity,
-                    color: Colors.grey.shade900,
-                    child: Image.network(
-                      product.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.image_not_supported),
-                    ),
+                    child: AppNetworkImage(url: product.imageUrl),
                   ),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -324,16 +350,8 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '\$${product.price.toStringAsFixed(2)}',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => context.go('/shopper/product/${product.productId}', extra: product),
-                        icon: const Icon(Icons.info_outline, size: 16),
-                        label: const Text('Details', style: TextStyle(fontSize: 11)),
-                      ),
+                      style: const TextStyle(
+                          color: AppColors.accent, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -355,9 +373,9 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Browse All',
-            style: Theme.of(context).textTheme.titleLarge,
+          const SectionHeader(
+            title: 'Browse All',
+            subtitle: 'The full catalog — search & filter',
           ),
           const SizedBox(height: 16),
 
@@ -492,23 +510,17 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
   ) {
     return Card(
       child: InkWell(
-        onTap: () => context.go('/shopper/product/${product.productId}', extra: product),
+        onTap: () => context.push('/shopper/product/${product.productId}', extra: product),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Container(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+                child: SizedBox(
                   width: double.infinity,
-                  color: Colors.grey.shade900,
-                  child: Image.network(
-                    product.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const Center(child: Icon(Icons.image_not_supported)),
-                  ),
+                  child: AppNetworkImage(url: product.imageUrl),
                 ),
               ),
             ),
@@ -529,9 +541,8 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
                   const SizedBox(height: 4),
                   Text(
                     '\$${product.price.toStringAsFixed(2)}',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: Colors.redAccent,
-                        ),
+                    style: const TextStyle(
+                        color: AppColors.accent, fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -561,7 +572,7 @@ class _ShopperHomeScreenState extends ConsumerState<ShopperHomeScreen> {
             title: const Text('My Orders'),
             onTap: () {
               Navigator.pop(context);
-              context.go('/shopper/orders');
+              context.push('/shopper/orders');
             },
           ),
           ListTile(

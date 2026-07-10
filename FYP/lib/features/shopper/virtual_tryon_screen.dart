@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/api_client.dart';
-import '../../core/providers/auth_notifier.dart';
 import '../../core/providers/cart_notifier.dart';
+import '../../core/providers/profile_setup_notifier.dart';
 import '../../shared/models/product_model.dart';
 
 class VirtualTryOnScreen extends ConsumerStatefulWidget {
@@ -22,9 +21,45 @@ class _VirtualTryOnScreenState extends ConsumerState<VirtualTryOnScreen> {
   String? _errorMessage;
   XFile? _selectedImage;
   String? _resultImageUrl;
-  String? _jobId;
+
+  /// Gender gate (Requirement 5.1): block try-on of a gendered garment for a
+  /// shopper of a different gender. Returns true if try-on is allowed.
+  bool _passesGenderGate() {
+    final product = widget.product;
+    if (product == null) return true;
+    final gender = ref.read(profileSetupProvider).gender;
+    if (gender == null) return true; // no profile yet -> allow
+    if (product.isGenderAppropriate(gender)) return true;
+
+    final target = product.genderTarget;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.info_outline, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              'This item is designed for $target shoppers.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return false;
+  }
 
   Future<void> _pickImage() async {
+    if (!_passesGenderGate()) return;
     try {
       final image = await _imagePicker.pickImage(
         source: ImageSource.gallery,

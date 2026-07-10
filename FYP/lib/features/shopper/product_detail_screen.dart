@@ -160,7 +160,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         action: SnackBarAction(
           label: 'Checkout',
           textColor: Colors.white,
-          onPressed: () => context.go('/shopper/checkout'),
+          onPressed: () => context.push('/shopper/checkout'),
         ),
       ),
     );
@@ -260,7 +260,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 backgroundColor: Colors.black38,
                 child: IconButton(
                   icon: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
-                  onPressed: () => context.go('/shopper/checkout'),
+                  onPressed: () => context.push('/shopper/checkout'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -324,6 +324,35 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
+
+                  // "Why recommended" (colour suitability + fit reasoning)
+                  if (product.whyRecommended != null &&
+                      product.whyRecommended!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppColors.primary.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome,
+                              color: AppColors.primaryLight, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              product.whyRecommended!,
+                              style: const TextStyle(
+                                  color: AppColors.textSecondary, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   // Recommended Size Alert Banner
                   if (hasProfile && recommendedSpec != null)
@@ -439,7 +468,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         Column(
                           children: [
                             ElevatedButton.icon(
-                              onPressed: () => context.go('/shopper/try-on', extra: product),
+                              onPressed: () => context.push('/shopper/try-on', extra: product),
                               icon: const Icon(Icons.photo_library_outlined, size: 16),
                               label: const Text('Try-On Photo', style: TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(
@@ -450,7 +479,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ),
                             const SizedBox(height: 8),
                             ElevatedButton.icon(
-                              onPressed: () => context.go('/shopper/ar-tryon'),
+                              onPressed: () => context.push('/shopper/ar-tryon'),
                               icon: const Icon(Icons.camera_alt_outlined, size: 16),
                               label: const Text('Live AR', style: TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(

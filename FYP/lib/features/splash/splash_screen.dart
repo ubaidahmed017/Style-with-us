@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../core/providers/auth_notifier.dart';
+import '../../shared/widgets/ui.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -121,26 +122,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   opacity: _fadeIn.value,
                   child: Transform.scale(
                     scale: _scale.value,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.gradientPrimary,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.4),
-                            blurRadius: 30,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.checkroom_rounded,
-                        size: 60,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: const AppLogo(size: 120),
                   ),
                 ),
 

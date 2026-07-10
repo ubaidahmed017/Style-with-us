@@ -43,6 +43,7 @@ class AuthNotifier extends AsyncNotifier<UserSession?> {
     required String password,
     required String name,
     required String role,
+    String? companyName,
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -60,11 +61,12 @@ class AuthNotifier extends AsyncNotifier<UserSession?> {
         'email': email,
         'name': name,
         'role': role,
+        if (companyName != null) 'companyName': companyName,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Register with backend
-      await _apiClient.registerUser(name, email, role);
+      // Register with backend (creates the Brand record when role == brand)
+      await _apiClient.registerUser(name, email, role, companyName: companyName);
 
       return UserSession(
         uid: user.uid,

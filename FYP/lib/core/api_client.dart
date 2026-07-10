@@ -2,7 +2,16 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ApiClient {
-  static const String baseUrl = 'http://localhost:8000';
+  // Backend base URL. Override at build/run time with:
+  //   flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+  // Notes:
+  //   - Windows/macOS/Linux desktop, web, iOS simulator: http://localhost:8000
+  //   - Android emulator: http://10.0.2.2:8000 (localhost points at the emulator)
+  //   - Physical device: use your machine's LAN IP, e.g. http://192.168.1.5:8000
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://localhost:8000',
+  );
   late Dio _dio;
 
   ApiClient() {
@@ -58,11 +67,17 @@ class ApiClient {
   Dio get dio => _dio;
 
   // User endpoints
-  Future<Response> registerUser(String name, String email, String role) {
+  Future<Response> registerUser(
+    String name,
+    String email,
+    String role, {
+    String? companyName,
+  }) {
     return _dio.post('/users/register', data: {
       'name': name,
       'email': email,
       'role': role,
+      if (companyName != null) 'company_name': companyName,
     });
   }
 
@@ -74,6 +89,14 @@ class ApiClient {
     return _dio.get('/users/profile');
   }
 
+  // Brand endpoints
+  Future<Response> createOrUpdateBrand(String companyName, {String? logoUrl}) {
+    return _dio.post('/users/brand', data: {
+      'company_name': companyName,
+      if (logoUrl != null) 'logo_url': logoUrl,
+    });
+  }
+
   // Product endpoints
   Future<Response> getProducts({
     int page = 1,
@@ -81,6 +104,10 @@ class ApiClient {
     String? gender,
     String? sizeLabel,
     String? brandId,
+    double? chest,
+    double? waist,
+    double? hips,
+    double? inseam,
   }) {
     return _dio.get('/inventory/products', queryParameters: {
       'page': page,
@@ -88,7 +115,24 @@ class ApiClient {
       if (gender != null) 'gender': gender,
       if (sizeLabel != null) 'size_label': sizeLabel,
       if (brandId != null) 'brand_id': brandId,
+      if (chest != null) 'chest': chest,
+      if (waist != null) 'waist': waist,
+      if (hips != null) 'hips': hips,
+      if (inseam != null) 'inseam': inseam,
     });
+  }
+
+  // Products owned by the calling brand.
+  Future<Response> getMyProducts() {
+    return _dio.get('/inventory/my-products');
+  }
+
+  Future<Response> createProduct(Map<String, dynamic> product) {
+    return _dio.post('/inventory/products', data: product);
+  }
+
+  Future<Response> deleteProduct(String productId) {
+    return _dio.delete('/inventory/products/$productId');
   }
 
   Future<Response> getRecommendations() {

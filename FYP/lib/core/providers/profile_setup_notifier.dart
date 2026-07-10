@@ -65,6 +65,25 @@ class UserProfile {
     'shoulder_width_cm': shoulderWidth,
     'unit_preference': unitPreference == UnitPreference.metric ? 'metric' : 'imperial',
   };
+
+  /// Build a profile from the backend's GET /users/profile response.
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    double? toD(dynamic v) => v == null ? null : (v as num).toDouble();
+    return UserProfile(
+      gender: json['gender'] as String?,
+      unitPreference: (json['unit_preference'] == 'imperial')
+          ? UnitPreference.imperial
+          : UnitPreference.metric,
+      height: toD(json['height_cm']),
+      weight: toD(json['weight_kg']),
+      age: (json['age'] as num?)?.toInt(),
+      chest: toD(json['chest_cm']),
+      waist: toD(json['waist_cm']),
+      hips: toD(json['hips_cm']),
+      inseam: toD(json['inseam_cm']),
+      shoulderWidth: toD(json['shoulder_width_cm']),
+    );
+  }
 }
 
 class ProfileSetupNotifier extends Notifier<UserProfile> {
@@ -122,6 +141,21 @@ class ProfileSetupNotifier extends Notifier<UserProfile> {
     }
 
     await _apiClient.updateUserProfile(state.toJson());
+  }
+
+  /// Load the saved profile from the backend so measurements survive an app
+  /// restart (the server is the source of truth). Silently no-ops if the user
+  /// hasn't created a profile yet (404) or the backend is unreachable.
+  Future<void> loadFromBackend() async {
+    try {
+      final response = await _apiClient.getUserProfile();
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        state = UserProfile.fromJson(data);
+      }
+    } catch (_) {
+      // No profile yet or backend down — keep current (empty) state.
+    }
   }
 
   void reset() {

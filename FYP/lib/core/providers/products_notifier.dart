@@ -57,8 +57,14 @@ class ProductsNotifier extends AsyncNotifier<List<Product>> {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['products'] ?? response.data;
-        var products = data.map((p) => Product.fromJson(p)).toList();
+        // The backend returns a plain JSON array of products. (Older shapes
+        // wrapped it in {"products": [...]}, so handle both.)
+        final raw = response.data;
+        final List<dynamic> data =
+            raw is List ? raw : (raw['products'] as List? ?? []);
+        var products = data
+            .map((p) => Product.fromJson(p as Map<String, dynamic>))
+            .toList();
         return _applyClientFilters(products);
       }
     } catch (e) {

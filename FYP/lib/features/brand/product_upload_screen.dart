@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
 
 class ProductUploadScreen extends ConsumerStatefulWidget {
   const ProductUploadScreen({Key? key}) : super(key: key);
@@ -23,6 +24,36 @@ class _ProductUploadScreenState extends ConsumerState<ProductUploadScreen> {
   String? _dominantColor = '#E63946';
   bool _isLoading = false;
   String? _errorMessage;
+
+  // Which standard sizes this product is offered in. At least one is required
+  // so the product has a size spec (backend Requirement 8.1) and shows up in
+  // size search / fit recommendations.
+  final Set<String> _selectedSizes = {'M'};
+
+  // Built-in size chart (cm). Ranges are used to build ProductSizeSpec rows so
+  // brands don't have to type measurement ranges for a demo upload.
+  static const Map<String, Map<String, double>> _sizeChart = {
+    'S': {
+      'chest_min': 86, 'chest_max': 92, 'waist_min': 71, 'waist_max': 77,
+      'hips_min': 89, 'hips_max': 95, 'inseam_min': 76, 'inseam_max': 79,
+      'shoulder_width_min': 41, 'shoulder_width_max': 43,
+    },
+    'M': {
+      'chest_min': 92, 'chest_max': 98, 'waist_min': 77, 'waist_max': 83,
+      'hips_min': 95, 'hips_max': 101, 'inseam_min': 79, 'inseam_max': 82,
+      'shoulder_width_min': 43, 'shoulder_width_max': 45,
+    },
+    'L': {
+      'chest_min': 98, 'chest_max': 104, 'waist_min': 83, 'waist_max': 89,
+      'hips_min': 101, 'hips_max': 107, 'inseam_min': 82, 'inseam_max': 85,
+      'shoulder_width_min': 45, 'shoulder_width_max': 47,
+    },
+    'XL': {
+      'chest_min': 104, 'chest_max': 112, 'waist_min': 89, 'waist_max': 97,
+      'hips_min': 107, 'hips_max': 115, 'inseam_min': 85, 'inseam_max': 88,
+      'shoulder_width_min': 47, 'shoulder_width_max': 49,
+    },
+  };
 
   final _colorOptions = [
     {'name': 'Red', 'hex': '#E63946'},
@@ -54,6 +85,11 @@ class _ProductUploadScreenState extends ConsumerState<ProductUploadScreen> {
       return;
     }
 
+    if (_selectedSizes.isEmpty) {
+      setState(() => _errorMessage = 'Please select at least one size');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -62,16 +98,30 @@ class _ProductUploadScreenState extends ConsumerState<ProductUploadScreen> {
     try {
       final apiClient = ApiClient();
 
-      await apiClient.dio.post('/inventory/products', data: {
+      final stock = int.tryParse(_stockController.text) ?? 0;
+      final sizeSpecs = _selectedSizes.map((label) {
+        final chart = _sizeChart[label]!;
+        return {
+          'size_label': label,
+          'stock_quantity': stock,
+          ...chart,
+        };
+      }).toList();
+
+      final data = <String, dynamic>{
         'sku': _skuController.text.trim(),
         'name': _nameController.text.trim(),
-        'description': _descriptionController.text.trim(),
         'price': double.parse(_priceController.text),
-        'stock_quantity': int.parse(_stockController.text),
-        'image_url': _imageUrlController.text.trim(),
         'gender_target': _selectedGender,
         'dominant_color_hex': _dominantColor,
-      });
+        'size_specs': sizeSpecs,
+      };
+      final description = _descriptionController.text.trim();
+      if (description.isNotEmpty) data['description'] = description;
+      final imageUrl = _imageUrlController.text.trim();
+      if (imageUrl.isNotEmpty) data['image_url'] = imageUrl;
+
+      await apiClient.createProduct(data);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -212,6 +262,35 @@ class _ProductUploadScreenState extends ConsumerState<ProductUploadScreen> {
             ),
             const SizedBox(height: 24),
 
+            // Available sizes (at least one required)
+            Text(
+              'Available Sizes (stock applies to each)',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              children: _sizeChart.keys.map((label) {
+                final selected = _selectedSizes.contains(label);
+                return FilterChip(
+                  label: Text(label),
+                  selected: selected,
+                  onSelected: _isLoading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            if (value) {
+                              _selectedSizes.add(label);
+                            } else {
+                              _selectedSizes.remove(label);
+                            }
+                          });
+                        },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+
             // Dominant Color
             Text(
               'Dominant Color (for recommendations)',
@@ -235,8 +314,8 @@ class _ProductUploadScreenState extends ConsumerState<ProductUploadScreen> {
                               radix: 16)),
                       borderRadius: BorderRadius.circular(8),
                       border: isSelected
-                          ? Border.all(color: Colors.blue, width: 3)
-                          : Border.all(color: Colors.grey.shade300),
+                          ? Border.all(color: AppColors.primary, width: 3)
+                          : Border.all(color: AppColors.border),
                     ),
                     child: Center(
                       child: Text(

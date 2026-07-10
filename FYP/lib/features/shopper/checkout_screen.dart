@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/cart_notifier.dart';
 import '../../core/providers/orders_notifier.dart';
 import '../../core/api_client.dart';
+import '../../core/theme.dart';
+import '../../shared/widgets/ui.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({Key? key}) : super(key: key);
@@ -18,7 +21,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _handleCheckout() async {
     final cartState = ref.read(cartProvider);
-
     if (cartState.items.isEmpty) {
       setState(() => _errorMessage = 'Your cart is empty');
       return;
@@ -31,8 +33,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     try {
       final apiClient = ApiClient();
-
-      // Prepare order items
       final items = cartState.items
           .map((item) => {
                 'product_id': item.productId,
@@ -41,317 +41,189 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               })
           .toList();
 
-      // Create payment intent
       final response = await apiClient.createPaymentIntent(items);
 
-      if (response.statusCode == 200) {
-        final clientSecret = response.data['client_secret'];
-        final orderId = response.data['order_id'];
+      if (response.statusCode == 200 && mounted) {
+        // Demo payment (no live Stripe): brief processing delay.
+        await Future.delayed(const Duration(seconds: 2));
+
+        final orderItems = cartState.items
+            .map((item) => OrderItem(
+                  productId: item.productId,
+                  productName: item.productName,
+                  price: item.price,
+                  sizeLabel: item.sizeLabel,
+                  quantity: item.quantity,
+                ))
+            .toList();
+        ref.read(ordersProvider.notifier).addOrder(orderItems, cartState.total);
+        ref.read(cartProvider.notifier).clearCart();
 
         if (mounted) {
-          // In a real app, this would integrate with Stripe Flutter SDK
-          // For now, simulate successful payment
-          await _simulatePaymentProcess(clientSecret);
-
-          // Save order to history
-          final orderItems = cartState.items
-              .map((item) => OrderItem(
-                    productId: item.productId,
-                    productName: item.productName,
-                    price: item.price,
-                    sizeLabel: item.sizeLabel,
-                    quantity: item.quantity,
-                  ))
-              .toList();
-          ref.read(ordersProvider.notifier).addOrder(orderItems, cartState.total);
-
-          // Clear cart
-          ref.read(cartProvider.notifier).clearCart();
-
-          // Show success
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Order placed successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-
-            // Navigate to home
-            context.go('/shopper');
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Order placed successfully!')),
+          );
+          context.go('/shopper');
         }
       }
     } catch (e) {
       setState(() {
-        _errorMessage = 'Checkout failed: $e';
+        _errorMessage = 'Checkout failed. Please try again.';
         _isProcessing = false;
       });
     }
   }
 
-  Future<void> _simulatePaymentProcess(String clientSecret) async {
-    // Simulate payment processing delay
-    await Future.delayed(const Duration(seconds: 2));
-  }
-
   @override
   Widget build(BuildContext context) {
     final cartState = ref.watch(cartProvider);
-    final isEmpty = cartState.items.isEmpty;
+    final subtotal = cartState.total;
+    final tax = subtotal * 0.08;
+    final total = subtotal + tax;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Checkout'),
-        centerTitle: true,
-      ),
-      body: isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      appBar: AppBar(title: const Text('Checkout')),
+      body: AppBackground(
+        child: cartState.items.isEmpty
+            ? EmptyState(
+                icon: Icons.shopping_cart_outlined,
+                title: 'Your cart is empty',
+                subtitle: 'Browse the catalog and add items to check out.',
+                action: GradientButton(
+                  label: 'Continue Shopping',
+                  expand: false,
+                  onPressed: () => context.go('/shopper'),
+                ),
+              )
+            : Column(
                 children: [
-                  Icon(Icons.shopping_cart_outlined,
-                      size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Your cart is empty',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => context.go('/shopper'),
-                    child: const Text('Continue Shopping'),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(AppSpacing.md),
                       children: [
-                        // Order Summary
-                        Text(
-                          'Order Summary',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Cart Items
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: cartState.items.length,
-                            separatorBuilder: (_, __) => Divider(
-                              height: 1,
-                              color: Colors.grey.shade300,
-                            ),
-                            itemBuilder: (context, index) {
-                              final item = cartState.items[index];
-                              return Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item.productName,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          if (item.sizeLabel != null)
-                                            Text(
-                                              'Size: ${item.sizeLabel}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall,
-                                            ),
-                                          Text(
-                                            'Qty: ${item.quantity}',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '\$${item.subtotal.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '\$${item.price.toStringAsFixed(2)} each',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Pricing Breakdown
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                        const SectionHeader(title: 'Order summary'),
+                        const SizedBox(height: AppSpacing.md),
+                        SurfaceCard(
+                          padding: EdgeInsets.zero,
                           child: Column(
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Subtotal'),
-                                  Text(
-                                    '\$${cartState.total.toStringAsFixed(2)}',
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Shipping'),
-                                  const Text('FREE'),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Tax'),
-                                  Text(
-                                    '\$${(cartState.total * 0.08).toStringAsFixed(2)}',
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 24),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Total',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                  Text(
-                                    '\$${(cartState.total * 1.08).toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              for (int i = 0;
+                                  i < cartState.items.length;
+                                  i++) ...[
+                                if (i > 0)
+                                  Divider(height: 1, color: AppColors.border),
+                                _item(cartState.items[i]),
+                              ]
                             ],
                           ),
-                        ),
-
-                        if (_errorMessage != null) ...[
-                          const SizedBox(height: 24),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _errorMessage!,
-                              style: TextStyle(color: Colors.red.shade700),
-                            ),
+                        ).animate().fadeIn().moveY(begin: 12),
+                        const SizedBox(height: AppSpacing.lg),
+                        SurfaceCard(
+                          child: Column(
+                            children: [
+                              _row('Subtotal',
+                                  '\$${subtotal.toStringAsFixed(2)}'),
+                              const SizedBox(height: 10),
+                              _row('Shipping', 'FREE',
+                                  valueColor: AppColors.success),
+                              const SizedBox(height: 10),
+                              _row('Tax (8%)', '\$${tax.toStringAsFixed(2)}'),
+                              Divider(height: 24, color: AppColors.border),
+                              _row('Total', '\$${total.toStringAsFixed(2)}',
+                                  bold: true),
+                            ],
                           ),
+                        ).animate().fadeIn(delay: 100.ms).moveY(begin: 12),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          AppErrorBanner(message: _errorMessage!),
                         ],
                       ],
                     ),
                   ),
-                ),
-                // Action Buttons
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Colors.grey.shade300),
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSurface,
+                      border: Border(
+                          top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: GradientButton(
+                        label: _isProcessing
+                            ? 'Processing…'
+                            : 'Place Order · \$${total.toStringAsFixed(2)}',
+                        icon: Icons.lock_outline,
+                        loading: _isProcessing,
+                        onPressed: _isProcessing ? null : _handleCheckout,
+                      ),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ElevatedButton(
-                        onPressed: _isProcessing ? null : _handleCheckout,
-                        style: ElevatedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.green,
-                        ),
-                        child: _isProcessing
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : const Text(
-                                'Place Order',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: _isProcessing ? null : () => context.go('/shopper'),
-                        style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: const Text('Continue Shopping'),
-                      ),
-                    ],
-                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _item(CartItem item) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: const Icon(Icons.checkroom, color: AppColors.primaryLight),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.productName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    if (item.sizeLabel != null) 'Size ${item.sizeLabel}',
+                    'Qty ${item.quantity}',
+                  ].join('  ·  '),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
+          ),
+          Text('\$${item.subtotal.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value,
+      {bool bold = false, Color? valueColor}) {
+    final style = TextStyle(
+      fontSize: bold ? 18 : 14,
+      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+      color: valueColor ?? (bold ? AppColors.textPrimary : AppColors.textSecondary),
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: TextStyle(
+                fontSize: bold ? 18 : 14,
+                fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+        Text(value, style: style),
+      ],
     );
   }
 }
