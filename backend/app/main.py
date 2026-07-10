@@ -5,6 +5,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 
+from app.core.config import settings
 from app.routers import users, auth, inventory, ml, payments, recommendations, admin
 
 limiter = Limiter(key_func=get_remote_address)
@@ -14,7 +15,7 @@ app = FastAPI(title="Style With Us API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+origins = settings.allowed_origins.split(",")
 
 app.add_middleware(
     CORSMiddleware,

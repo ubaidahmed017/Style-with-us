@@ -29,8 +29,7 @@ class ApiClient {
             try {
               final user = FirebaseAuth.instance.currentUser;
               if (user != null) {
-                await user.getIdToken(forceRefresh: true);
-                final newToken = await user.getIdToken();
+                final newToken = await user.getIdToken(true);
 
                 final options = error.requestOptions;
                 options.headers['Authorization'] = 'Bearer $newToken';

@@ -27,10 +27,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (_user: User) => {
+  const fetchProfile = async (user: User) => {
     try {
       // Endpoint is idempotent and returns user details including role
-      const response = await api.post('/users/register');
+      // Explicitly attach the Firebase ID token to avoid timing issues
+      // where the axios interceptor might not yet have auth.currentUser.
+      let config = {} as any;
+      if (user && typeof (user as any).getIdToken === 'function') {
+        const token = await (user as any).getIdToken();
+        config = { headers: { Authorization: `Bearer ${token}` } };
+      }
+      const response = await api.post('/users/register', {}, config);
       setProfile(response.data);
     } catch (error) {
       console.error('Error fetching user profile from database:', error);

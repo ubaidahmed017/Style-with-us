@@ -3,7 +3,7 @@ Order and OrderItem models for checkout.
 """
 
 import uuid
-from sqlalchemy import Column, String, Float, ForeignKey, Enum, Index
+from sqlalchemy import Column, String, Float, ForeignKey, Enum, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 

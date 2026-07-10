@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import verify_firebase_token, DecodedToken, get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.models import User, UserProfile, UserRole
 from app.schemas import (
@@ -16,6 +17,14 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _is_admin_email(email: str | None) -> bool:
+    """True if this email is in the configured admin allowlist."""
+    if not email:
+        return False
+    allow = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
+    return email.strip().lower() in allow
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -34,7 +43,25 @@ async def register_user(
     result = await db.execute(stmt)
     existing_user = result.scalar_one_or_none()
 
+    # Fall back to matching a pre-seeded account by email (e.g. an admin seeded
+    # before its first login) and bind it to this Firebase identity.
+    if existing_user is None and user.email:
+        stmt = select(User).where(User.email == user.email)
+        result = await db.execute(stmt)
+        existing_user = result.scalar_one_or_none()
+        if existing_user is not None and existing_user.firebase_uid != user.uid:
+            existing_user.firebase_uid = user.uid
+            await db.commit()
+            await db.refresh(existing_user)
+
+    force_admin = _is_admin_email(user.email)
+
     if existing_user:
+        # Guarantee configured admin emails always hold the admin role.
+        if force_admin and existing_user.role != UserRole.ADMIN:
+            existing_user.role = UserRole.ADMIN
+            await db.commit()
+            await db.refresh(existing_user)
         return UserResponse(
             user_id=existing_user.user_id,
             name=existing_user.name,
@@ -43,12 +70,12 @@ async def register_user(
             created_at=existing_user.created_at.isoformat(),
         )
 
-    # Create new user
+    # Create new user (admin if the email is in the allowlist, else shopper).
     new_user = User(
         firebase_uid=user.uid,
         name=user.email or "User",  # Default name
         email=user.email or "",
-        role=UserRole.SHOPPER,
+        role=UserRole.ADMIN if force_admin else UserRole.SHOPPER,
     )
     db.add(new_user)
     await db.commit()

@@ -1,14 +1,23 @@
-import asyncio
-import sys
 import os
+import sys
+import asyncio
+from pathlib import Path
+from dotenv import load_dotenv
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+sys.path.append(str(Path(__file__).resolve().parent))
 
 from sqlalchemy import select
-from app.core.database import AsyncSessionLocal
+from app.core.database import engine, AsyncSessionLocal
+from app.models.base import Base
 from app.models import User, UserRole
 
 async def seed_admin(email: str, firebase_uid: str, name: str):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     async with AsyncSessionLocal() as session:
         stmt = select(User).where(User.email == email)
         result = await session.execute(stmt)

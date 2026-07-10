@@ -31,7 +31,8 @@ export const LoginPage: React.FC = () => {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // AuthContext will automatically fetch profile and check role
+      // AuthContext fetches the profile and checks the role. Admins are
+      // redirected by the effect above; non-admins see the "not admin" notice.
     } catch (err: any) {
       console.error('Login error:', err);
       let msg = 'Failed to sign in. Please check your credentials.';
@@ -41,6 +42,9 @@ export const LoginPage: React.FC = () => {
         msg = 'Invalid email address.';
       }
       setError(msg);
+    } finally {
+      // Always stop the spinner — otherwise an authenticated non-admin (who is
+      // never navigated away) would see it spin indefinitely.
       setLoading(false);
     }
   };

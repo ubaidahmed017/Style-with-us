@@ -1,30 +1,43 @@
-// This is a basic Flutter widget test.
+// Smoke test for the Style With Us app shell.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Boots the real router app (`StyleWithUsApp`) with `authProvider` overridden
+// so the widget tree never touches Firebase in the test environment. Verifies
+// the app renders the splash screen and then routes an unauthenticated user to
+// the login screen.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fyp/main.dart';
+import 'package:fyp/core/providers/auth_notifier.dart';
+import 'package:fyp/features/auth/login_screen.dart';
+
+/// Test double that resolves to "signed out" without calling Firebase.
+class _UnauthenticatedAuthNotifier extends AuthNotifier {
+  @override
+  Future<UserSession?> build() async => null;
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('boots to splash and routes unauthenticated users to login',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(_UnauthenticatedAuthNotifier.new),
+        ],
+        child: const StyleWithUsApp(),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Splash screen renders first.
+    expect(find.text('Style With Us'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Advance past the splash delay + intro animation; an unauthenticated
+    // session is redirected to the login screen.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 }

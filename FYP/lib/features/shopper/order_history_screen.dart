@@ -263,7 +263,7 @@ class _OrderCardState extends State<_OrderCard> {
                   ),
                 ),
               ],
-            ),
+            ],
           ),
         ),
       ),

@@ -1,19 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../lib/core/providers/auth_notifier.dart';
-import '../lib/core/providers/cart_notifier.dart';
-import '../lib/core/providers/profile_setup_notifier.dart';
-
-class MockFirebaseAuth extends Mock implements firebase_auth.FirebaseAuth {}
-class MockFirebaseFirestore extends Mock implements FirebaseFirestore {}
-class MockUserCredential extends Mock implements firebase_auth.UserCredential {}
-class MockUser extends Mock implements firebase_auth.User {}
+import 'package:fyp/core/providers/cart_notifier.dart';
+import 'package:fyp/core/providers/profile_setup_notifier.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('CartNotifier Tests', () {
     late ProviderContainer container;
 

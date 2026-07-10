@@ -2,11 +2,14 @@
 Authentication middleware and RBAC dependencies.
 """
 
+import base64
+import json
 from typing import Optional
 from fastapi import Depends, HTTPException, Header
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.core.firebase as firebase
 from app.core.firebase import verify_id_token
 from app.core.database import get_db
 from app.models import User, UserRole
@@ -16,6 +19,21 @@ class DecodedToken(BaseModel):
     """Decoded Firebase ID token."""
     uid: str
     email: Optional[str] = None
+
+
+def _decode_jwt_unverified(token: str) -> Optional[dict]:
+    """Decode a JWT payload WITHOUT verifying its signature.
+
+    Only used as a last resort in verify-only/degraded mode (no valid service
+    account key) so local development can still authenticate. NEVER trusted
+    when a real credential is available.
+    """
+    try:
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # restore padding
+        return json.loads(base64.urlsafe_b64decode(payload_b64))
+    except Exception:
+        return None
 
 
 async def verify_firebase_token(
@@ -54,6 +72,19 @@ async def verify_firebase_token(
             email=decoded.get("email")
         )
     except Exception as e:
+        # Dev-only last resort: with no valid service-account key (verify-only
+        # mode), accept a well-formed Firebase JWT by reading its payload
+        # without signature verification. Disabled the moment a real key exists.
+        if firebase.DEGRADED_MODE:
+            claims = _decode_jwt_unverified(token)
+            uid = claims and (claims.get("user_id") or claims.get("sub"))
+            if uid:
+                print(
+                    "[AUTH] WARNING: accepting token via UNVERIFIED decode "
+                    f"(verify-only dev mode) for {claims.get('email')!r}."
+                )
+                return DecodedToken(uid=uid, email=claims.get("email"))
+
         error_detail = str(e)
         if "expired" in error_detail.lower():
             detail = "Token expired"
