@@ -1,5 +1,13 @@
 # Design Document: Style With Us
 
+> ⚠️ **SUPERSEDED (ML section):** This document describes a **server-side** ML
+> pipeline (Celery workers running ResNet50 / MediaPipe / OpenCV on uploaded
+> photos). The project later pivoted to an **on-device, privacy-first** approach —
+> all ML runs on the Flutter client and raw photos never leave the device. The
+> authoritative source is `requirements.md` / `tasks.md`. Read the ML/worker
+> sections here as historical context only; the rest (data model, auth, checkout,
+> admin) still reflects the implementation.
+
 ## Overview
 
 Style With Us is a premium AI-powered fashion-tech platform that addresses the core problem of online retail returns by enabling shoppers to visualize clothing on their own bodies before purchasing. The system accepts user-provided body photos, runs ML-powered body shape classification and skin tone analysis, and composites digital garments onto the user's image via MediaPipe Pose Estimation and OpenCV — all delivered through a Flutter mobile client backed by a Python FastAPI service.

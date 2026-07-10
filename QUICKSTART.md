@@ -1,11 +1,16 @@
 # Style With Us - Quick Start Guide
 
-## Project Status: 90% Complete
+> **Note:** This guide originally targeted a Windows dev box (`D:\ubaid\app\...`).
+> The repo now lives at the current checkout root; replace any `D:\ubaid\app` path
+> below with your repo root. For an accurate architecture + status overview, see
+> [README.md](README.md).
 
-- ✅ **Backend API**: 100% complete (6 routers, 20+ endpoints)
-- ✅ **Flutter Frontend**: 100% complete (all screens and state management)
-- ✅ **Firebase**: Linked and configured (project-id: `style-with-us-49180`)
-- ⏳ **React Admin Portal**: To be implemented (not blocking mobile app)
+## Project Status (target: working FYP demo)
+
+- ✅ **Backend API**: core routers work (users, inventory, recommendations, payments, admin). ML endpoints are lightweight job records only (ML runs on-device).
+- ✅ **Flutter Frontend**: all screens present; body analysis + size-fit + recommendations are real. Virtual/AR try-on and payment are **simulated** for the demo.
+- ✅ **React Admin Portal**: implemented (Vite + React + TS), served at `/admin`.
+- ✅ **Firebase**: project `style-with-us-49180` (backend falls back to verify-only mode without a service-account key).
 
 ---
 
